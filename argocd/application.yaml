@@ -1,0 +1,28 @@
+# Argo CD Application — 이 저장소의 apps/ 를 클러스터에 반영한다.
+#
+# 규칙 3: 플랫폼은 이 Application 을 직접 sync 하지 않는다.
+# 플랫폼은 apps/ 에 커밋만 하고, 아래 automated 설정에 따라 Argo CD 가 스스로 당겨간다.
+# 플랫폼이 하는 일은 조회(application, resource-tree)와 이벤트 수신뿐이다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: plus-poc-app
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/devopsbmpart/plus_poc_gitops.git
+    targetRevision: main
+    path: apps/plus-poc-app
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: plus-poc
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
