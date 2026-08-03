@@ -6,7 +6,7 @@ metadata:
     app: plus-poc-app
   annotations:
     # S6 이 커밋할 때 함께 갱신한다. 배포된 것이 어느 이슈에서 왔는지 남긴다.
-    jira.issue: PLACEHOLDER
+    jira.issue: TPS-456
 spec:
   replicas: 1
   selector:
@@ -17,20 +17,20 @@ spec:
       labels:
         app: plus-poc-app
       annotations:
-        jira.issue: PLACEHOLDER
+        jira.issue: TPS-456
     spec:
       containers:
         - name: app
           # 규칙 4 — tag 가 아니라 digest 로 고정한다.
           # 아래는 placeholder 다. 첫 빌드 후 S6 이 실제 digest 로 교체한다.
-          image: ghcr.io/devopsbmpart/plus_poc_app@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          image: ghcr.io/devopsbmpart/plus_poc_app@sha256:c9c132913c8ebd1af7886c09b6435c662b6d8416fa4eac11fa2b6fd0cb7e6d53
           ports:
             - containerPort: 8080
           env:
             - name: PORT
               value: '8080'
             - name: JIRA_ISSUE
-              value: PLACEHOLDER
+              value: TPS-456
           readinessProbe:
             httpGet:
               path: /healthz
