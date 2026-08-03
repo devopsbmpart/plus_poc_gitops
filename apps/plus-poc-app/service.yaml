@@ -3,8 +3,12 @@ kind: Service
 metadata:
   name: plus-poc-app
 spec:
+  # NodePort 로 연다. 30049 는 고정값이라 배포 후 주소가 바뀌지 않는다.
+  type: NodePort
   selector:
     app: plus-poc-app
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 8080
+      nodePort: 30049

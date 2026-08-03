@@ -18,7 +18,7 @@ spec:
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: plus-poc
+    namespace: test-dev
 
   syncPolicy:
     automated:
