@@ -31,6 +31,13 @@ spec:
               value: '8080'
             - name: JIRA_ISSUE
               value: TPS-2473
+            - name: APP_VERSION
+              value: '0.2.0'
+            - name: SOURCE_REPO
+              value: devopsbmpart/plus_poc_app
+            # S6 이 커밋할 때 실제 digest 로 치환한다.
+            - name: IMAGE_DIGEST
+              value: DIGEST_PLACEHOLDER
           readinessProbe:
             httpGet:
               path: /healthz
