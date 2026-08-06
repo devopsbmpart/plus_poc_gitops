@@ -1,43 +1,45 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: plus-poc-app
+  name: plus-poc-app-stg
   labels:
-    app: plus-poc-app
+    app: plus-poc-app-stg
+    env: stg
   annotations:
-    # S6 이 커밋할 때 함께 갱신한다. 배포된 것이 어느 이슈에서 왔는지 남긴다.
-    jira.issue: TPS-2473
+    # 플랫폼(S6)이 GitOps 푸시 시 갱신한다.
+    jira.issue: PLACEHOLDER
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: plus-poc-app
+      app: plus-poc-app-stg
   template:
     metadata:
       labels:
-        app: plus-poc-app
+        app: plus-poc-app-stg
+        env: stg
       annotations:
-        jira.issue: TPS-2473
+        jira.issue: PLACEHOLDER
     spec:
       containers:
         - name: app
           # 규칙 4 — tag 가 아니라 digest 로 고정한다.
-          # 아래는 placeholder 다. 첫 빌드 후 S6 이 실제 digest 로 교체한다.
-          image: ghcr.io/devopsbmpart/plus_poc_app@sha256:455b9292ede7e0b923be809ed084667dc4ca53b97d8d19948ec2920a212e5211
+          image: ghcr.io/devopsbmpart/plus_poc_app@sha256:0000000000000000000000000000000000000000000000000000000000000000
           ports:
             - containerPort: 8080
           env:
             - name: PORT
               value: '8080'
+            - name: APP_ENV
+              value: STG
             - name: JIRA_ISSUE
-              value: TPS-2473
+              value: PLACEHOLDER
             - name: APP_VERSION
               value: '0.2.0'
             - name: SOURCE_REPO
               value: devopsbmpart/plus_poc_app
-            # S6 이 커밋할 때 실제 digest 로 치환한다.
             - name: IMAGE_DIGEST
-              value: sha256:455b9292ede7e0b923be809ed084667dc4ca53b97d8d19948ec2920a212e5211
+              value: DIGEST_PLACEHOLDER
           readinessProbe:
             httpGet:
               path: /healthz

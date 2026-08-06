@@ -1,0 +1,29 @@
+# Argo CD Application — STG 환경
+#
+# syncPolicy.automated 를 두지 않는다. 의도적이다.
+#
+# 이 플랫폼은 각 단계를 사용자가 명시적으로 승인하는 수동 게이트 방식이다.
+# automated 를 켜면 GitOps 에 push 하는 즉시 반영돼 승인 단계가 무의미해진다.
+# 커밋 후에는 OutOfSync 로 대기하고, 사용자가 Sync 를 눌러야 배포된다.
+#
+# 수동 sync 는 Argo CD 가 정식 지원하는 운영 모드다. 승인 게이트가 필요한
+# 환경에서는 오히려 표준이다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: plus-poc-app-stg
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/devopsbmpart/plus_poc_gitops.git
+    targetRevision: main
+    path: apps/plus-poc-app-stg
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: test-dev
+
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

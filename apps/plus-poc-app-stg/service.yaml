@@ -1,12 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: plus-poc-app
+  name: plus-poc-app-stg
 spec:
-  # NodePort 로 연다. 30049 는 고정값이라 배포 후 주소가 바뀌지 않는다.
   type: NodePort
   selector:
-    app: plus-poc-app
+    app: plus-poc-app-stg
   ports:
     - name: http
       port: 80
