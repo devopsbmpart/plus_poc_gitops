@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: plus-poc-app-hk
+  labels:
+    app: plus-poc-app-hk
+    env: hk
+  annotations:
+    # 플랫폼(S6) 또는 bump 워크플로가 GitOps 푸시 시 갱신한다.
+    jira.issue: TPS-2473
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: plus-poc-app-hk
+  template:
+    metadata:
+      labels:
+        app: plus-poc-app-hk
+        env: hk
+      annotations:
+        jira.issue: TPS-2473
+    spec:
+      containers:
+        - name: app
+          # 규칙 4 — tag 가 아니라 digest 로 고정한다.
+          image: ghcr.io/devopsbmpart/plus_poc_app@sha256:3dc23e68ac22fc29087263a7519a8de9a808a8f92df534720488851892019d27
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: '8080'
+            - name: APP_ENV
+              value: HK
+            - name: JIRA_ISSUE
+              value: TPS-2473
+            - name: APP_VERSION
+              value: '0.2.0'
+            - name: SOURCE_REPO
+              value: devopsbmpart/plus_poc_app
+            - name: IMAGE_DIGEST
+              value: sha256:3dc23e68ac22fc29087263a7519a8de9a808a8f92df534720488851892019d27
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080

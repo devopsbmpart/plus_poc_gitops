@@ -1,0 +1,189 @@
+name: bump-image
+
+# 이미지 digest 를 매니페스트에 고정한다.
+#
+# 호출 주체 두 가지:
+#  - 플랫폼이 REST API 로 dispatch
+#  - 사람이 Actions 탭에서 직접 실행 (플랫폼 장애 시 복구 경로)
+#
+# 커밋까지만 한다. 배포는 Argo CD 가 Sync 단계에서 한다.
+#
+# 매니페스트 배치는 저장소마다 다르다. 그래서 경로를 하드코딩하지 않고
+# 디렉토리 안에서 Deployment 를 담은 파일을 찾아 고친다.
+# 지원 형태: 분리된 파일 / 단일 multi-doc / Kustomize
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: '대상 애플리케이션'
+        type: choice
+        options:
+          - plus-poc-app
+          - plus-poc-api
+        required: true
+      env:
+        description: '대상 환경'
+        type: choice
+        options:
+          - hk
+          - stg
+          - prd
+        required: true
+      digest:
+        description: '이미지 digest (sha256:...)'
+        type: string
+        required: true
+      jira_issue:
+        description: 'Jira Issue Key'
+        type: string
+        required: false
+        default: ''
+      path:
+        description: '매니페스트 경로. 비우면 apps/<app>-<env> 를 쓴다. 파일도 가능'
+        type: string
+        required: false
+        default: ''
+      container:
+        description: '갱신할 컨테이너 이름'
+        type: string
+        required: false
+        default: 'app'
+
+permissions:
+  contents: write
+
+# 여러 요청이 동시에 와도 직렬 처리. push 충돌을 구조적으로 막는다.
+concurrency:
+  group: gitops-bump
+  cancel-in-progress: false
+
+run-name: bump ${{ inputs.app }}-${{ inputs.env }} ${{ inputs.digest }}
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: patch
+        name: 매니페스트 갱신
+        env:
+          APP: ${{ inputs.app }}
+          TARGET_ENV: ${{ inputs.env }}
+          DIGEST: ${{ inputs.digest }}
+          ISSUE: ${{ inputs.jira_issue }}
+          IN_PATH: ${{ inputs.path }}
+          CONTAINER: ${{ inputs.container }}
+          REGISTRY: ghcr.io/devopsbmpart
+        run: |
+          set -euo pipefail
+
+          # 입력 검증. dispatch 페이로드는 외부 입력으로 취급한다.
+          echo "$DIGEST" | grep -qE '^sha256:[0-9a-f]{64}$' \
+            || { echo "::error::digest 형식이 아닙니다: $DIGEST"; exit 1; }
+          case "$TARGET_ENV" in hk|stg|prd) ;; *) echo "::error::알 수 없는 환경: $TARGET_ENV"; exit 1;; esac
+
+          # plus-poc-app → plus_poc_app (저장소 이름 규칙)
+          REPO_NAME="${APP//-/_}"
+          IMAGE_REPO="${REGISTRY}/${REPO_NAME}"
+          IMAGE="${IMAGE_REPO}@${DIGEST}"
+
+          TARGET="${IN_PATH:-apps/${APP}-${TARGET_ENV}}"
+          [ -e "$TARGET" ] || { echo "::error::경로가 없습니다: $TARGET"; exit 1; }
+
+          echo "대상 경로: $TARGET"
+          echo "이미지    : $IMAGE"
+
+          # ── 갱신 대상 파일 결정 ────────────────────────────────
+          if [ -f "$TARGET" ]; then
+            # 파일을 직접 지정한 경우
+            FILES="$TARGET"
+            MODE=file
+          elif [ -f "$TARGET/kustomization.yaml" ] || [ -f "$TARGET/kustomization.yml" ]; then
+            MODE=kustomize
+          else
+            # 디렉토리 안에서 Deployment 를 담은 yaml 을 찾는다.
+            # multi-doc 파일도 'kind: Deployment' 를 포함하므로 같이 걸린다.
+            FILES=$(grep -rlE '^\s*kind:\s*Deployment\s*$' "$TARGET" --include='*.yaml' --include='*.yml' || true)
+            [ -n "$FILES" ] || { echo "::error::$TARGET 안에서 Deployment 를 찾지 못했습니다"; exit 1; }
+            MODE=yaml
+          fi
+
+          # ── 갱신 ──────────────────────────────────────────────
+          if [ "$MODE" = kustomize ]; then
+            echo "Kustomize 모드"
+            if ! command -v kustomize >/dev/null; then
+              curl -sSL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" \
+                | bash -s -- "$RUNNER_TEMP"
+              export PATH="$RUNNER_TEMP:$PATH"
+            fi
+            (cd "$TARGET" && kustomize edit set image "${IMAGE_REPO}=${IMAGE}")
+          else
+            echo "YAML 모드 — 대상 파일:"
+            echo "$FILES" | sed 's/^/  /'
+
+            for f in $FILES; do
+              # select() 로 문서를 거른다. multi-doc 파일에서 Deployment 만 바뀐다.
+              yq -i "(select(.kind == \"Deployment\") | .spec.template.spec.containers[] | select(.name == \"${CONTAINER}\")).image = \"${IMAGE}\"" "$f"
+
+              # 앱이 자기 출처를 알 수 있게 환경변수도 맞춘다. 없으면 아무 일도 안 한다.
+              yq -i "(select(.kind == \"Deployment\") | .spec.template.spec.containers[] | select(.name == \"${CONTAINER}\").env[]? | select(.name == \"IMAGE_DIGEST\")).value = \"${DIGEST}\"" "$f"
+
+              if [ -n "$ISSUE" ]; then
+                yq -i "(select(.kind == \"Deployment\") | .metadata.annotations.\"jira.issue\") = \"${ISSUE}\"" "$f"
+                yq -i "(select(.kind == \"Deployment\") | .spec.template.metadata.annotations.\"jira.issue\") = \"${ISSUE}\"" "$f"
+                yq -i "(select(.kind == \"Deployment\") | .spec.template.spec.containers[] | select(.name == \"${CONTAINER}\").env[]? | select(.name == \"JIRA_ISSUE\")).value = \"${ISSUE}\"" "$f"
+              fi
+            done
+          fi
+
+          # ── 반영 검증. 조용한 no-op 을 막는다 ──────────────────
+          grep -rq "@${DIGEST}" "$TARGET" \
+            || { echo "::error::digest 가 반영되지 않았습니다. 컨테이너 이름(${CONTAINER})이 맞는지 확인하세요"; exit 1; }
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # 멱등. 같은 digest 로 다시 돌아도 빈 커밋을 쌓지 않는다.
+          if git diff --quiet; then
+            echo "이미 ${DIGEST} 로 고정되어 있습니다. 커밋 생략."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git diff --stat
+
+          git commit -am "chore(deploy): ${APP}-${TARGET_ENV} 이미지 갱신" \
+                     -m "digest 를 ${DIGEST} 로 고정합니다. Argo CD 는 OutOfSync 로 대기합니다." \
+                     -m "Jira-Issue: ${ISSUE}"
+
+          for i in 1 2 3; do
+            if git push; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "push 충돌. 재시도 $i"
+            git pull --rebase --autostash
+          done
+          echo "::error::push 3회 실패"
+          exit 1
+
+      - name: 결과 요약
+        if: always()
+        env:
+          APP: ${{ inputs.app }}
+          TARGET_ENV: ${{ inputs.env }}
+          DIGEST: ${{ inputs.digest }}
+          ISSUE: ${{ inputs.jira_issue }}
+          CHANGED: ${{ steps.patch.outputs.changed }}
+        run: |
+          {
+            echo "### GitOps 갱신"
+            echo ""
+            echo "| 항목 | 값 |"
+            echo "|---|---|"
+            echo "| 대상 | \`${APP}-${TARGET_ENV}\` |"
+            echo "| Digest | \`${DIGEST}\` |"
+            echo "| Jira Issue | ${ISSUE:-(없음)} |"
+            echo "| 커밋 발생 | ${CHANGED:-unknown} |"
+          } >> "$GITHUB_STEP_SUMMARY"
