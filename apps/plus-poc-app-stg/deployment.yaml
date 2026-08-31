@@ -24,7 +24,7 @@ spec:
       containers:
         - name: app
           # 규칙 4 — tag 가 아니라 digest 로 고정한다.
-          image: docker.io/scmkim/plus_poc_app@sha256:2ff2a5de8ede4bb24bdebf222d097e0267a453eb82ca7410f3715ee9442b018e
+          image: docker.io/scmkim/plus_poc_app@sha256:1090e79d77adf2db3afb826e2b2d08a5bf2e1872b859c789741f8995d5d282de
           ports:
             - containerPort: 8080
           env:
@@ -39,7 +39,7 @@ spec:
             - name: SOURCE_REPO
               value: devopsbmpart/plus_poc_app
             - name: IMAGE_DIGEST
-              value: sha256:2ff2a5de8ede4bb24bdebf222d097e0267a453eb82ca7410f3715ee9442b018e
+              value: sha256:1090e79d77adf2db3afb826e2b2d08a5bf2e1872b859c789741f8995d5d282de
           readinessProbe:
             httpGet:
               path: /healthz
